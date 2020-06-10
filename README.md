@@ -8,16 +8,16 @@ Open Source Development funding and support provided by the following contributo
 
 #### Benchmark
 
-##### MFTECmd - Linux 
-| Name               | Value                          |
+#### MFTECmd - Linux 
+| MFTECmd - Linux    | Result                          |
 |--------------------|--------------------------------|
 | File size          | 469.5MB                        |
 | Run time           | 12.0830 seconds                |
 | FILE records found | 392,879 (Free records: 87,835) |
 | Lines produced     | 580,417                        |
 
-##### AnalyseMFT - Linux 
-| Name           | Value                    |
+#### AnalyseMFT - Linux 
+| AnalyseMFT     | Result                    |
 |----------------|--------------------------|
 | File size      | 469.5MB                  |
 | Run time       | 2 minutes 21.058 seconds |
