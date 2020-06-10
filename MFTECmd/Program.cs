@@ -24,12 +24,19 @@ using ServiceStack;
 using ServiceStack.Text;
 using Usn;
 using CsvWriter = CsvHelper.CsvWriter;
-using Directory = Alphaleonis.Win32.Filesystem.Directory;
-using File = Alphaleonis.Win32.Filesystem.File;
-using Path = Alphaleonis.Win32.Filesystem.Path;
+using Directory = System.IO.Directory;
+using File = System.IO.File;
+using Path = System.IO.Path;
 
 namespace MFTECmd
 {
+    public class MyClass
+    {
+        static MyClass()
+        {
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        }
+    }
     internal class Program
     {
         private static Logger _logger;
@@ -51,10 +58,8 @@ namespace MFTECmd
 
             _logger = LogManager.GetLogger("MFTECmd");
 
-            _fluentCommandLineParser = new FluentCommandLineParser<ApplicationArguments>
-            {
-                IsCaseSensitive = false
-            };
+            _fluentCommandLineParser = new FluentCommandLineParser<ApplicationArguments>();
+            _fluentCommandLineParser.UseOwnOptionPrefix("--");  // https://github.com/fclp/fluent-command-line-parser/issues/42
 
             _fluentCommandLineParser.Setup(arg => arg.File)
                 .As('f')
@@ -79,11 +84,11 @@ namespace MFTECmd
                 .WithDescription(
                     "File name to save CSV formatted results to. When present, overrides default name\r\n");
 
-
             _fluentCommandLineParser.Setup(arg => arg.BodyDirectory)
                 .As("body")
                 .WithDescription(
                     "Directory to save bodyfile formatted results to. --bdl is also required when using this option");
+
             _fluentCommandLineParser.Setup(arg => arg.BodyName)
                 .As("bodyf")
                 .WithDescription(
@@ -137,7 +142,7 @@ namespace MFTECmd
             _fluentCommandLineParser.Setup(arg => arg.IncludeShortNames)
                 .As("sn")
                 .WithDescription(
-                    "Include DOS file name types. Default is FALSE").SetDefault(false);
+                    "Include DOS file name types. Default is FALSE").SetDefault(true);
 
             _fluentCommandLineParser.Setup(arg => arg.AllTimeStampsAllTime)
                 .As("at")
@@ -148,13 +153,13 @@ namespace MFTECmd
             _fluentCommandLineParser.Setup(arg => arg.Vss)
                 .As("vss")
                 .WithDescription(
-                    "Process all Volume Shadow Copies that exist on drive specified by -f . Default is FALSE")
-                .SetDefault(false);
+                    "Process all Volume Shadow Copies that exist on drive specified by --f . Default is FALSE")
+                .SetDefault(true);
             _fluentCommandLineParser.Setup(arg => arg.Dedupe)
                 .As("dedupe")
                 .WithDescription(
-                    "Deduplicate -f & VSCs based on SHA-1. First file found wins. Default is FALSE\r\n")
-                .SetDefault(false);
+                    "Deduplicate --f & VSCs based on SHA-1. First file found wins. Default is FALSE\r\n")
+                .SetDefault(true);
 
 
             _fluentCommandLineParser.Setup(arg => arg.Debug)
@@ -168,16 +173,18 @@ namespace MFTECmd
             var header =
                 $"MFTECmd version {Assembly.GetExecutingAssembly().GetName().Version}" +
                 "\r\n\r\nAuthor: Eric Zimmerman (saericzimmerman@gmail.com)" +
-                "\r\nhttps://github.com/EricZimmerman/MFTECmd";
+                "\r\nhttps://github.com/EricZimmerman/MFTECmd" +
+                "\r\nLinux Port: Scott Dermott (scottdermott@outlook.com)" +
+                "\r\nhttps://github.com/scottdermott/MFTECmd.git";
 
-            var footer = @"Examples: MFTECmd.exe -f ""C:\Temp\SomeMFT"" --csv ""c:\temp\out"" --csvf MyOutputFile.csv" +
+            var footer = @"Examples: ./MFTECmd --f ""/media/temp/SomeMFT"" --csv ""c:\temp\out"" --csvf MyOutputFile.csv" +
                          "\r\n\t " +
-                         @" MFTECmd.exe -f ""C:\Temp\SomeMFT"" --csv ""c:\temp\out""" + "\r\n\t " +
-                         @" MFTECmd.exe -f ""C:\Temp\SomeMFT"" --json ""c:\temp\jsonout""" + "\r\n\t " +
-                         @" MFTECmd.exe -f ""C:\Temp\SomeMFT"" --body ""c:\temp\bout"" --bdl c" + "\r\n\t " +
-                         @" MFTECmd.exe -f ""C:\Temp\SomeMFT"" --de 5-5" + "\r\n\t " +
+                         @" ./MFTECmd --f ""/media/temp/SomeMFT"" --csv ""/home/me/csvoutput""" + "\r\n\t " +
+                         @" ./MFTECmd --f ""/media/temp/SomeMFT"" --json ""./temp""" + "\r\n\t " +
+                         @" ./MFTECmd --f ""/media/temp/SomeMFT"" --body ""."" --bdl c" + "\r\n\t " +
+                         @" ./MFTECmd --f ""/media/temp/SomeMFT"" --de 5-5" + "\r\n\t " +
                          "\r\n\t" +
-                         "  Short options (single letter) are prefixed with a single dash. Long commands are prefixed with two dashes\r\n";
+                         "  All command line options are prefixed with TWO dashes\r\n";
 
             _fluentCommandLineParser.SetupHelp("?", "help")
                 .WithHeader(header)
@@ -218,12 +225,12 @@ namespace MFTECmd
                 {
                     //OK
                 }
-                else if (!File.Exists(_fluentCommandLineParser.Object.File))
-                {
-                    //the path is off the root of the drive, so it works for things like $Boot, $MFT, etc
-                    _logger.Warn($"File '{_fluentCommandLineParser.Object.File}' not found. Exiting");
-                    return;
-                }
+                // else if (!File.Exists(_fluentCommandLineParser.Object.File))
+                // {
+                //     //the path is off the root of the drive, so it works for things like $Boot, $MFT, etc
+                //     _logger.Warn($"File '{_fluentCommandLineParser.Object.File}' not found. Exiting");
+                //     return;
+                // }
             }
 
 
@@ -231,10 +238,10 @@ namespace MFTECmd
             _logger.Info("");
             _logger.Info($"Command line: {string.Join(" ", Environment.GetCommandLineArgs().Skip(1))}\r\n");
 
-            if (IsAdministrator() == false)
-            {
-                _logger.Fatal("Warning: Administrator privileges not found!\r\n");
-            }
+            // if (IsAdministrator() == false)
+            // {
+            //     _logger.Fatal("Warning: Administrator privileges not found!\r\n");
+            // }
 
             if (_fluentCommandLineParser.Object.Debug)
             {
@@ -249,19 +256,20 @@ namespace MFTECmd
             LogManager.ReconfigExistingLoggers();
 
 
-            if (_fluentCommandLineParser.Object.Vss & (IsAdministrator() == false))
-            {
-                _logger.Error("--vss is present, but administrator rights not found. Exiting\r\n");
-                return;
-            }
+            // if (_fluentCommandLineParser.Object.Vss & (IsAdministrator() == false))
+            // {
+            //     _logger.Error("--vss is present, but administrator rights not found. Exiting\r\n");
+            //     return;
+            // }
 
             //determine file type
             var ft = GetFileType(_fluentCommandLineParser.Object.File);
-            _logger.Warn($"File type: {ft}\r\n");
+            _logger.Warn($"File type: {ft}");
+            Console.WriteLine();
 
             if (_fluentCommandLineParser.Object.CsvDirectory.IsNullOrEmpty() == false)
             {
-                if (Directory.ExistsDrive(Path.GetFullPath(_fluentCommandLineParser.Object.CsvDirectory)) == false)
+                if (Directory.Exists(Path.GetFullPath(_fluentCommandLineParser.Object.CsvDirectory)) == false)
                 {
                     _logger.Error("Destination location not available. Verify drive letter and try again. Exiting\r\n");
                     return;
@@ -270,7 +278,7 @@ namespace MFTECmd
 
             if (_fluentCommandLineParser.Object.JsonDirectory.IsNullOrEmpty() == false)
             {
-                if (Directory.ExistsDrive(Path.GetFullPath(_fluentCommandLineParser.Object.JsonDirectory)) == false)
+                if (Directory.Exists(Path.GetFullPath(_fluentCommandLineParser.Object.JsonDirectory)) == false)
                 {
                     _logger.Error("Destination location not available. Verify drive letter and try again. Exiting\r\n");
                     return;
@@ -279,7 +287,7 @@ namespace MFTECmd
 
             if (_fluentCommandLineParser.Object.BodyDirectory.IsNullOrEmpty() == false)
             {
-                if (Directory.ExistsDrive(Path.GetFullPath(_fluentCommandLineParser.Object.BodyDirectory)) == false)
+                if (Directory.Exists(Path.GetFullPath(_fluentCommandLineParser.Object.BodyDirectory)) == false)
                 {
                     _logger.Error("Destination location not available. Verify drive letter and try again. Exiting\r\n");
                     return;
@@ -294,7 +302,7 @@ namespace MFTECmd
                     _logger.Error("--do option missing. Exiting\r\n");
                     return;
                 }
-                if (Directory.ExistsDrive(Path.GetFullPath(_fluentCommandLineParser.Object.DumpEntry)) == false)
+                if (Directory.Exists(Path.GetFullPath(_fluentCommandLineParser.Object.DumpEntry)) == false)
                 {
                     _logger.Error("Destination location not available. Verify drive letter and try again. Exiting\r\n");
                     return;
@@ -312,7 +320,10 @@ namespace MFTECmd
                     {
                         _fluentCommandLineParser.HelpOption.ShowHelp(_fluentCommandLineParser.Options);
 
-                        _logger.Warn("--csv, --json, --body, --dd, or --de is required. Exiting");
+                        _logger.Warn("--csv, --json, --body, --dd, or --de is required. Exiting\r\n");
+                        _logger.Warn($"'{_fluentCommandLineParser.Object.File}' is File\r\n");
+                        _logger.Warn($"'{_fluentCommandLineParser.Object.CsvDirectory}' is CsvDirectory\r\n");
+                        _logger.Warn($"'{_fluentCommandLineParser.Object.CsvName}' is CsvName\r\n");
                         return;
                     }
 
@@ -333,7 +344,6 @@ namespace MFTECmd
                         _logger.Warn("--do is required when using --dd. Exiting");
                         return;
                     }
-
                     ProcessMft();
                     break;
                 case FileType.LogFile:
@@ -378,11 +388,15 @@ namespace MFTECmd
 
         private static void ProcessBoot()
         {
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
             var sw = new Stopwatch();
             sw.Start();
             try
             {
                 Boot.Boot bf = null;
+                _logger.Warn("LINE396");
+                // _logger.Warn($"'{sw}'");
 
                 var bootFiles = new Dictionary<string, Boot.Boot>();
 
@@ -419,9 +433,11 @@ namespace MFTECmd
                 {
                     try
                     {
-                        _logger.Warn($"'{_fluentCommandLineParser.Object.File}' is in use. Rerouting...\r\n");
+                        _logger.Warn($"'{_fluentCommandLineParser.Object.File}' is in use. Rerouting...");
+                        Console.WriteLine();
 
-                        var ll = new List<string> {_fluentCommandLineParser.Object.File};
+                        var ll = new List<string>();
+                        ll.Add(_fluentCommandLineParser.Object.File);
 
                         if (_fluentCommandLineParser.Object.Vss)
                         {
@@ -461,7 +477,8 @@ namespace MFTECmd
                 }
 
                 _logger.Info(
-                    $"\r\nProcessed '{_fluentCommandLineParser.Object.File}'{extra} in {sw.Elapsed.TotalSeconds:N4} seconds\r\n");
+                    $"Processed '{_fluentCommandLineParser.Object.File}'{extra} in {sw.Elapsed.TotalSeconds:N4} seconds");
+                Console.WriteLine();
 
                 StreamWriter swCsv = null;
 
@@ -484,7 +501,7 @@ namespace MFTECmd
                         }
                     }
 
-                    var outName = $"{DateTimeOffset.UtcNow:yyyyMMddHHmmss}_MFTECmd_$Boot_Output.csv";
+                    var outName = $"MFTECmd_Boot_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
 
                     if (_fluentCommandLineParser.Object.CsvName.IsNullOrEmpty() == false)
                     {
@@ -493,11 +510,15 @@ namespace MFTECmd
 
                     var outFile = Path.Combine(_fluentCommandLineParser.Object.CsvDirectory, outName);
 
-                    _logger.Warn($"CSV output will be saved to '{outFile}'\r\n");
+                    Console.WriteLine();
+                    _logger.Info($"CSV output will be saved to '{outFile}'");
+                    Console.WriteLine();
 
                     swCsv = new StreamWriter(outFile, false, Encoding.UTF8);
 
-                    _csvWriter = new CsvWriter(swCsv,CultureInfo.InvariantCulture);
+                    _csvWriter = new CsvWriter((CsvHelper.ISerializer)swCsv);
+                    _csvWriter.Configuration.Delimiter = ",";
+                    _csvWriter.Configuration.ShouldQuote = (field, context) => true;
 
                     var foo = _csvWriter.Configuration.AutoMap<BootOut>();
 
@@ -610,9 +631,11 @@ namespace MFTECmd
                 {
                     try
                     {
-                        _logger.Warn($"'{_fluentCommandLineParser.Object.File}' is in use. Rerouting...\r\n");
+                        _logger.Warn($"'{_fluentCommandLineParser.Object.File}' is in use. Rerouting...");
+                        Console.WriteLine();
 
-                        var ll = new List<string> {_fluentCommandLineParser.Object.File};
+                        var ll = new List<string>();
+                        ll.Add(_fluentCommandLineParser.Object.File);
 
                         if (_fluentCommandLineParser.Object.Vss)
                         {
@@ -655,7 +678,7 @@ namespace MFTECmd
                 }
 
                 _logger.Info(
-                    $"\r\nProcessed '{_fluentCommandLineParser.Object.File}'{extra} in {sw.Elapsed.TotalSeconds:N4} seconds");
+                    $"Processed '{_fluentCommandLineParser.Object.File}'{extra} in {sw.Elapsed.TotalSeconds:N4} seconds");
                 Console.WriteLine();
 
                 foreach (var jFile in jFiles)
@@ -690,7 +713,7 @@ namespace MFTECmd
                         var vssTime = Helper.GetVssCreationDate(vssNumber);
 
                         outName =
-                            $"{dt:yyyyMMddHHmmss}_VSS{vssNumber}_{vssTime:yyyyMMddHHmmss_fffffff}_MFTECmd_$J_Output.csv";
+                            $"VSS{vssNumber}_{vssTime:yyyyMMddHHmmss_fffffff}_MFTECmd_J_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
 
                         if (_fluentCommandLineParser.Object.CsvName.IsNullOrEmpty() == false)
                         {
@@ -701,7 +724,7 @@ namespace MFTECmd
                     else
                     {
                         //normal file
-                        outName = $"{dt:yyyyMMddHHmmss}_MFTECmd_$J_Output.csv";
+                        outName = $"MFTECmd_J_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
 
                         if (_fluentCommandLineParser.Object.CsvName.IsNullOrEmpty() == false)
                         {
@@ -712,11 +735,15 @@ namespace MFTECmd
 
                     outFile = Path.Combine(_fluentCommandLineParser.Object.CsvDirectory, outName);
 
-                    _logger.Warn($"\tCSV output will be saved to '{outFile}'");
+                    Console.WriteLine();
+                    _logger.Info($"CSV output will be saved to '{outFile}'");
+                    Console.WriteLine();
 
                     swCsv = new StreamWriter(outFile, false, Encoding.UTF8);
 
-                    _csvWriter = new CsvWriter(swCsv,CultureInfo.InvariantCulture);
+                    _csvWriter = new CsvWriter((CsvHelper.ISerializer)swCsv);
+                    _csvWriter.Configuration.Delimiter = ",";
+                    _csvWriter.Configuration.ShouldQuote = (field, context) => true;
 
                     var foo = _csvWriter.Configuration.AutoMap<JEntryOut>();
 
@@ -807,9 +834,11 @@ namespace MFTECmd
                 {
                     try
                     {
-                        _logger.Warn($"'{_fluentCommandLineParser.Object.File}' is in use. Rerouting...\r\n");
+                        _logger.Warn($"'{_fluentCommandLineParser.Object.File}' is in use. Rerouting...");
+                        Console.WriteLine();
 
-                        var ll = new List<string> {_fluentCommandLineParser.Object.File};
+                        var ll = new List<string>();
+                        ll.Add(_fluentCommandLineParser.Object.File);
 
                         if (_fluentCommandLineParser.Object.Vss)
                         {
@@ -849,7 +878,7 @@ namespace MFTECmd
                 }
 
                 _logger.Info(
-                    $"\r\nProcessed '{_fluentCommandLineParser.Object.File}'{extra} in {sw.Elapsed.TotalSeconds:N4} seconds");
+                    $"Processed '{_fluentCommandLineParser.Object.File}'{extra} in {sw.Elapsed.TotalSeconds:N4} seconds");
                 Console.WriteLine();
 
                 var dt = DateTimeOffset.UtcNow;
@@ -888,7 +917,7 @@ namespace MFTECmd
                             var vssTime = Helper.GetVssCreationDate(vssNumber);
 
                             outName =
-                                $"{dt:yyyyMMddHHmmss}_VSS{vssNumber}_{vssTime:yyyyMMddHHmmss_fffffff}_MFTECmd_$SDS_Output.csv";
+                                $"VSS{vssNumber}_{vssTime:yyyyMMddHHmmss_fffffff}_MFTECmd_SDS_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
 
                             if (_fluentCommandLineParser.Object.CsvName.IsNullOrEmpty() == false)
                             {
@@ -899,7 +928,7 @@ namespace MFTECmd
                         else
                         {
                             //normal file
-                            outName = $"{dt:yyyyMMddHHmmss}_MFTECmd_$SDS_Output.csv";
+                            outName = $"MFTECmd_SDS_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
 
                             if (_fluentCommandLineParser.Object.CsvName.IsNullOrEmpty() == false)
                             {
@@ -909,11 +938,15 @@ namespace MFTECmd
 
                         outFile = Path.Combine(_fluentCommandLineParser.Object.CsvDirectory, outName);
 
-                        _logger.Warn($"\tCSV output will be saved to '{outFile}'");
+                        Console.WriteLine();
+                        _logger.Info($"CSV output will be saved to '{outFile}'");
+                        Console.WriteLine();
 
                         swCsv = new StreamWriter(outFile, false, Encoding.UTF8);
 
-                        _csvWriter = new CsvWriter(swCsv,CultureInfo.InvariantCulture);
+                        _csvWriter = new CsvWriter((CsvHelper.ISerializer)swCsv);
+                        _csvWriter.Configuration.Delimiter = ",";
+                        _csvWriter.Configuration.ShouldQuote = (field, context) => true;
 
                         var foo = _csvWriter.Configuration.AutoMap<SdsOut>();
 
@@ -924,8 +957,6 @@ namespace MFTECmd
 
                         foreach (var sdsEntry in sdsFile.Value.SdsEntries)
                         {
-                            _logger.Debug($"Processing Id '{sdsEntry.Id}'");
-
                             var sdO = new SdsOut
                             {
                                 Hash = sdsEntry.Hash,
@@ -938,7 +969,7 @@ namespace MFTECmd
                                 SourceFile = sdsFile.Key
                             };
 
-                            if (sdsEntry.SecurityDescriptor.Sacl != null && sdsEntry.SecurityDescriptor.Sacl.RawBytes.Length> 0)
+                            if (sdsEntry.SecurityDescriptor.Sacl != null)
                             {
                                 sdO.SaclAceCount = sdsEntry.SecurityDescriptor.Sacl.AceCount;
                                 var uniqueAce = new HashSet<string>();
@@ -1102,32 +1133,34 @@ namespace MFTECmd
 
                 var ll = new List<string>();
 
-                if (_fluentCommandLineParser.Object.Vss)
-                {
-                    var dl = Path.GetPathRoot(Path.GetFullPath(_fluentCommandLineParser.Object.File));
+                // if (_fluentCommandLineParser.Object.Vss)
+                // {
+                //     var dl = Path.GetPathRoot(Path.GetFullPath(_fluentCommandLineParser.Object.File));
 
-                    var vssInfos = Helper.GetVssInfoViaWmi(dl);
+                //     var vssInfos = Helper.GetVssInfoViaWmi(dl);
 
-                    foreach (var vssInfo in vssInfos)
-                    {
-                        var vsp = $"{Helper.GetRawVolumePath(vssInfo.VssNumber)}\\$MFT";
-                        ll.Add(vsp);
-                    }
+                //     foreach (var vssInfo in vssInfos)
+                //     {
+                //         var vsp = $"{Helper.GetRawVolumePath(vssInfo.VssNumber)}\\$MFT";
+                //         ll.Add(vsp);
+                //     }
 
-                    var rawFiles = Helper.GetFiles(ll, _fluentCommandLineParser.Object.Dedupe);
+                //     var rawFiles = Helper.GetFiles(ll, _fluentCommandLineParser.Object.Dedupe);
 
-                    foreach (var rawCopyReturn in rawFiles)
-                    {
-                        localMft = new Mft(rawCopyReturn.FileStream);
-                        mftFiles.Add(rawCopyReturn.InputFilename, localMft);
-                    }
-                }
+                //     foreach (var rawCopyReturn in rawFiles)
+                //     {
+                //         localMft = new Mft(rawCopyReturn.FileStream);
+                //         mftFiles.Add(rawCopyReturn.InputFilename, localMft);
+                //     }
+                // }
             }
             catch (UnauthorizedAccessException)
             {
-                _logger.Warn($"'{_fluentCommandLineParser.Object.File}' is in use. Rerouting...\r\n");
+                _logger.Warn($"'{_fluentCommandLineParser.Object.File}' is in use. Rerouting...");
+                Console.WriteLine();
 
-                var ll = new List<string> {_fluentCommandLineParser.Object.File};
+                var ll = new List<string>();
+                ll.Add(_fluentCommandLineParser.Object.File);
 
                 if (_fluentCommandLineParser.Object.Vss)
                 {
@@ -1156,12 +1189,14 @@ namespace MFTECmd
                 }
                 catch (Exception e)
                 {
+                    _logger.Warn("LINE1173");
                     _logger.Error($"There was an error loading the file! Error: {e.Message}");
                     return;
                 }
             }
             catch (Exception e)
             {
+                _logger.Warn("LINE1179");
                 _logger.Error($"There was an error loading the file! Error: {e.Message}");
                 return;
             }
@@ -1176,7 +1211,8 @@ namespace MFTECmd
             }
 
             _logger.Info(
-                $"Processed '{_fluentCommandLineParser.Object.File}'{extra} in {sw.Elapsed.TotalSeconds:N4} seconds\r\n");
+                $"Processed '{_fluentCommandLineParser.Object.File}'{extra} in {sw.Elapsed.TotalSeconds:N4} seconds");
+            Console.WriteLine();
 
             var dt = DateTimeOffset.UtcNow;
 
@@ -1218,7 +1254,7 @@ namespace MFTECmd
                         var vssTime = Helper.GetVssCreationDate(vssNumber);
 
                         outName =
-                            $"{dt:yyyyMMddHHmmss}_VSS{vssNumber}_{vssTime:yyyyMMddHHmmss_fffffff}_MFTECmd_$MFT_Output.body";
+                            $"VSS{vssNumber}_{vssTime:yyyyMMddHHmmss_fffffff}_MFTECmd_MFT_{DateTime.Now:yyyyMMdd_HHmmss}.body";
 
                         if (_fluentCommandLineParser.Object.BodyName.IsNullOrEmpty() == false)
                         {
@@ -1229,7 +1265,7 @@ namespace MFTECmd
                     else
                     {
                         //normal file
-                        outName = $"{dt:yyyyMMddHHmmss}_MFTECmd_$MFT_Output.body";
+                        outName = $"MFTECmd_MFT_{DateTime.Now:yyyyMMdd_HHmmss}.body";
 
                         if (_fluentCommandLineParser.Object.BodyName.IsNullOrEmpty() == false)
                         {
@@ -1239,17 +1275,20 @@ namespace MFTECmd
 
                     outFile = Path.Combine(_fluentCommandLineParser.Object.BodyDirectory, outName);
 
-                    _logger.Warn($"\tBodyfile output will be saved to '{outFile}'");
+                    Console.WriteLine();
+                    _logger.Info($"Bodyfile output will be saved to '{outFile}'");
+                    Console.WriteLine();
 
                     try
                     {
-                        swBody = new StreamWriter(outFile, false, Encoding.GetEncoding(1252), 4096 * 4);
+
+                        swBody = new StreamWriter(outFile, false, Encoding.Unicode, 4096 * 4);
                         if (_fluentCommandLineParser.Object.UseCR)
                         {
                             swBody.NewLine = "\n";
                         }
 
-                        _bodyWriter = new CsvWriter(swBody,CultureInfo.InvariantCulture);
+                        _bodyWriter = new CsvWriter((CsvHelper.ISerializer)swBody);
                         _bodyWriter.Configuration.Delimiter = "|";
 
                         var foo = _bodyWriter.Configuration.AutoMap<BodyFile>();
@@ -1270,7 +1309,8 @@ namespace MFTECmd
                     catch (Exception e)
                     {
                         _logger.Error(
-                            $"\r\nError setting up bodyfile export. Please report to saericzimmerman@gmail.com.\r\n\r\nError: {e.Message}");
+                            $"\r\nError setting up bodyfile export. Please report to saericzimmerman@gmail.com.\r\nError: {e.Message}");
+                        Console.WriteLine();
                         _bodyWriter = null;
                     }
                 }
@@ -1310,7 +1350,7 @@ namespace MFTECmd
                             var vssTime = Helper.GetVssCreationDate(vssNumber);
 
                             outName =
-                                $"{dt:yyyyMMddHHmmss}_VSS{vssNumber}_{vssTime:yyyyMMddHHmmss_fffffff}_MFTECmd_$MFT_Output.csv";
+                                $"VSS{vssNumber}_{vssTime:yyyyMMddHHmmss_fffffff}_MFTECmd_MFT_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
 
                             if (_fluentCommandLineParser.Object.CsvName.IsNullOrEmpty() == false)
                             {
@@ -1321,7 +1361,7 @@ namespace MFTECmd
                         else
                         {
                             //normal file
-                            outName = $"{dt:yyyyMMddHHmmss}_MFTECmd_$MFT_Output.csv";
+                            outName = $"MFTECmd_MFT_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
 
                             if (_fluentCommandLineParser.Object.CsvName.IsNullOrEmpty() == false)
                             {
@@ -1331,12 +1371,16 @@ namespace MFTECmd
 
                         outFile = Path.Combine(_fluentCommandLineParser.Object.CsvDirectory, outName);
 
-                        _logger.Warn($"\tCSV output will be saved to '{outFile}'");
+                        Console.WriteLine();
+                        _logger.Info($"CSV output will be saved to '{outFile}'");
+                        Console.WriteLine();
                         try
                         {
                             swCsv = new StreamWriter(outFile, false, Encoding.UTF8, 4096 * 4);
 
-                            _csvWriter = new CsvWriter(swCsv,CultureInfo.InvariantCulture);
+                            _csvWriter = new CsvWriter((CsvHelper.ISerializer)swCsv);
+                            _csvWriter.Configuration.Delimiter = ",";
+                            _csvWriter.Configuration.ShouldQuote = (field, context) => true;
 
                             var foo = _csvWriter.Configuration.AutoMap<MFTRecordOut>();
 
@@ -1408,7 +1452,8 @@ namespace MFTECmd
                         catch (Exception e)
                         {
                             _logger.Error(
-                                $"\r\nError setting up CSV export. Please report to saericzimmerman@gmail.com.\r\n\r\nError: {e.Message}");
+                                $"\r\nError setting up CSV export. Please report to saericzimmerman@gmail.com.\r\nError: {e.Message}");
+                            Console.WriteLine();
                             _csvWriter = null;
                         }
                     }
@@ -1424,7 +1469,8 @@ namespace MFTECmd
                     catch (Exception ex)
                     {
                         _logger.Error(
-                            $"\r\nError exporting data. Please report to saericzimmerman@gmail.com.\r\n\r\nError: {ex.Message}");
+                            $"\r\nError exporting data. Please report to saericzimmerman@gmail.com.\r\nError: {ex.Message}");
+                        Console.WriteLine();
                     }
                 }
 
@@ -1464,7 +1510,7 @@ namespace MFTECmd
                         var vssTime = Helper.GetVssCreationDate(vssNumber);
 
                         outName =
-                            $"{dt:yyyyMMddHHmmss}_VSS{vssNumber}_{vssTime:yyyyMMddHHmmss_fffffff}_MFTECmd_$MFT_Output.json";
+                            $"VSS{vssNumber}_{vssTime:yyyyMMddHHmmss_fffffff}_MFTECmd_MFT_{DateTime.Now:yyyyMMdd_HHmmss}.json";
 
                         if (_fluentCommandLineParser.Object.JsonName.IsNullOrEmpty() == false)
                         {
@@ -1475,7 +1521,7 @@ namespace MFTECmd
                     else
                     {
                         //normal file
-                        outName = $"{dt:yyyyMMddHHmmss}_MFTECmd_$MFT_Output.json";
+                        outName = $"MFTECmd_MFT_{DateTime.Now:yyyyMMdd_HHmmss}.json";
 
                         if (_fluentCommandLineParser.Object.JsonName.IsNullOrEmpty() == false)
                         {
@@ -1485,7 +1531,9 @@ namespace MFTECmd
 
                     outFile = Path.Combine(_fluentCommandLineParser.Object.JsonDirectory, outName);
 
-                    _logger.Warn($"\tJSON output will be saved to '{outFile}'");
+                    Console.WriteLine();
+                    _logger.Info($"JSON output will be saved to '{outFile}'");
+                    Console.WriteLine();
 
                     try
                     {
@@ -1509,7 +1557,8 @@ namespace MFTECmd
                     catch (Exception e)
                     {
                         _logger.Error(
-                            $"\r\nError exporting to JSON. Please report to saericzimmerman@gmail.com.\r\n\r\nError: {e.Message}");
+                            $"\r\nError exporting to JSON. Please report to saericzimmerman@gmail.com.\r\nError: {e.Message}");
+                        Console.WriteLine();
                     }
                 }
 
@@ -1549,7 +1598,8 @@ namespace MFTECmd
 
                         File.WriteAllBytes(outFull, fileBytes);
 
-                        _logger.Warn($"FILE record at offset 0x{offset:X} dumped to '{outFull}'\r\n");
+                        _logger.Warn($"FILE record at offset 0x{offset:X} dumped to '{outFull}'");
+                        Console.WriteLine();
                     }
                 }
                 else
@@ -1693,7 +1743,8 @@ namespace MFTECmd
                         name = $"{pp}";
                     }
 
-                    _logger.Warn($"Contents for '{name}':\r\n");
+                    _logger.Warn($"Contents for '{name}':");
+                    Console.WriteLine();
                     _logger.Info("Key\t\t\tName");
                     foreach (var parentMapEntry in dlist)
                     {
@@ -1711,8 +1762,8 @@ namespace MFTECmd
                 }
                 else
                 {
-                    _logger.Warn($"Dumping details for file record with key '{key}'\r\n");
-
+                    _logger.Warn($"Dumping details for file record with key '{key}'");
+                    Console.WriteLine();
                     _logger.Info(fr);
                 }
             }
@@ -1743,7 +1794,8 @@ namespace MFTECmd
                 }
                 catch (Exception)
                 {
-                    var ll = new List<string> {file};
+                    var ll = new List<string>();
+                    ll.Add(file);
 
                     try
                     {
@@ -1890,7 +1942,6 @@ namespace MFTECmd
                     {
                         var adsRecord = GetCsvData(fr.Value, fn, adsInfo);
                         adsRecord.IsAds = true;
-                        adsRecord.OtherAttributeId = adsInfo.AttributeId;
                         _csvWriter?.WriteRecord(adsRecord);
 
                         _mftOutRecords?.Add(adsRecord);
@@ -2051,8 +2102,6 @@ namespace MFTECmd
                 mftr.FileName = $"{mftr.FileName}:{adsinfo.Name}";
                 mftr.FileSize = adsinfo.Size;
 
-                
-
                 try
                 {
                     mftr.Extension = Path.GetExtension(adsinfo.Name);
@@ -2062,11 +2111,17 @@ namespace MFTECmd
                     //sometimes bad chars show up
                 }
 
-                if (adsinfo.Name == "Zone.Identifier")
+                if ((adsinfo.Name == "Zone.Identifier") ^ (adsinfo.Name == "Avecto.Zone.Identifier"))
                 {
+
                     if (adsinfo.ResidentData != null)
                     {
-                        mftr.ZoneIdContents = Encoding.GetEncoding(1252).GetString(adsinfo.ResidentData.Data);
+                        if (adsinfo.Name == "Avecto.Zone.Identifier") {
+                            mftr.ZoneIdContents = Encoding.ASCII.GetString(adsinfo.ResidentData.Data);
+                        }
+                        else {
+                            mftr.ZoneIdContents = Encoding.ASCII.GetString(adsinfo.ResidentData.Data);
+                        }
                     }
                     else
                     {
@@ -2164,12 +2219,12 @@ namespace MFTECmd
             return mftr;
         }
 
-        public static bool IsAdministrator()
-        {
-            var identity = WindowsIdentity.GetCurrent();
-            var principal = new WindowsPrincipal(identity);
-            return principal.IsInRole(WindowsBuiltInRole.Administrator);
-        }
+        // public static bool IsAdministrator()
+        // {
+        //     var identity = WindowsIdentity.GetCurrent();
+        //     var principal = new WindowsPrincipal(identity);
+        //     return principal.IsInRole(WindowsBuiltInRole.Administrator);
+        // }
 
         private static void SetupNLog()
         {
