@@ -1,4 +1,4 @@
-# MFTECmd
+# MFTECmd (Windows | MacOS | Linux)
 
 MFT parser for NTFS file systems
 
