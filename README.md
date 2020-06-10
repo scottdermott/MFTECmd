@@ -4,16 +4,21 @@ MFT parser for NTFS file systems
 
 Open Source Development funding and support provided by the following contributors: [SANS Institute](http://sans.org/) and [SANS DFIR](http://dfir.sans.org/).
 
-### Ported from EricZimmerman to .netcoreapp2.2 so it can be run on Linux 
+##### Ported from EricZimmerman to .netcoreapp2.2 so it can be run on Linux 
 
-#### Benchmark - 1.3GB MFT
-###### MFTECmd - Linux 
-Run time 29.9044 seconds
-FILE records found: 708,597 (Free records: 408,323) File size: 1.1GB
+#### Benchmark
+##### MFTECmd - Linux 
+File size: 469.5MB
+Run time 12.0830 seconds
+FILE records found: 392,879 (Free records: 87,835) 
+Lines produced : 580,417
 
-###### AnalyseMFT - Linux 
-Run time 1219 seconds
+##### AnalyseMFT - Linux 
+File size: 469.5MB
+Run time 2 minutes 21.058 seconds
+Lines produced : 482,207
 
+### Building
 ```
 dotnet restore
 dotnet build -r linux-x64
