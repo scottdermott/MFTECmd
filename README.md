@@ -4,9 +4,15 @@ MFT parser for NTFS file systems
 
 Open Source Development funding and support provided by the following contributors: [SANS Institute](http://sans.org/) and [SANS DFIR](http://dfir.sans.org/).
 
-### Ported from EricZimmerman/MFTECmd to .netcore2.2 for Linux and other platforms
+## How to build and run on MacOS
+
+TLDR:
 
 ```
-build
-publish target linux-x64
+brew cask install dotnet-sdk
+git clone https://github.com/lctrcl/MFTECmd
+cd MFTECmd
+dotnet restore
+dotnet build --configuration=release
+dotnet MFTECmd/bin/Release/netcoreapp2.2/MFTECmd.dll --f /path/to/\$MFT --csv /path/to/csv/
 ```

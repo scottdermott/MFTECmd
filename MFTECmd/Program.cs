@@ -173,9 +173,9 @@ namespace MFTECmd
             var header =
                 $"MFTECmd version {Assembly.GetExecutingAssembly().GetName().Version}" +
                 "\r\n\r\nAuthor: Eric Zimmerman (saericzimmerman@gmail.com)" +
-                "\r\nhttps://github.com/EricZimmerman/MFTECmd" +
-                "\r\nLinux Port: Scott Dermott (scottdermott@outlook.com)" +
-                "\r\nhttps://github.com/scottdermott/MFTECmd.git";
+		"\r\nhttps://github.com/EricZimmerman/MFTECmd" +
+		"\r\nLinux Port: Scott Dermott (scottdermott@outlook.com)" +
+                "\r\nhttps://github.com/scottdermott/MFTECmd";
 
             var footer = @"Examples: ./MFTECmd --f ""/media/temp/SomeMFT"" --csv ""c:\temp\out"" --csvf MyOutputFile.csv" +
                          "\r\n\t " +
@@ -516,7 +516,7 @@ namespace MFTECmd
 
                     swCsv = new StreamWriter(outFile, false, Encoding.UTF8);
 
-                    _csvWriter = new CsvWriter((CsvHelper.ISerializer)swCsv);
+                    _csvWriter = new CsvWriter(swCsv);
                     _csvWriter.Configuration.Delimiter = ",";
                     _csvWriter.Configuration.ShouldQuote = (field, context) => true;
 
@@ -741,7 +741,7 @@ namespace MFTECmd
 
                     swCsv = new StreamWriter(outFile, false, Encoding.UTF8);
 
-                    _csvWriter = new CsvWriter((CsvHelper.ISerializer)swCsv);
+                    _csvWriter = new CsvWriter(swCsv);
                     _csvWriter.Configuration.Delimiter = ",";
                     _csvWriter.Configuration.ShouldQuote = (field, context) => true;
 
@@ -944,7 +944,7 @@ namespace MFTECmd
 
                         swCsv = new StreamWriter(outFile, false, Encoding.UTF8);
 
-                        _csvWriter = new CsvWriter((CsvHelper.ISerializer)swCsv);
+                        _csvWriter = new CsvWriter(swCsv);
                         _csvWriter.Configuration.Delimiter = ",";
                         _csvWriter.Configuration.ShouldQuote = (field, context) => true;
 
@@ -1288,7 +1288,7 @@ namespace MFTECmd
                             swBody.NewLine = "\n";
                         }
 
-                        _bodyWriter = new CsvWriter((CsvHelper.ISerializer)swBody);
+                        _bodyWriter = new CsvWriter(swBody);
                         _bodyWriter.Configuration.Delimiter = "|";
 
                         var foo = _bodyWriter.Configuration.AutoMap<BodyFile>();
@@ -1378,7 +1378,7 @@ namespace MFTECmd
                         {
                             swCsv = new StreamWriter(outFile, false, Encoding.UTF8, 4096 * 4);
 
-                            _csvWriter = new CsvWriter((CsvHelper.ISerializer)swCsv);
+                            _csvWriter = new CsvWriter(swCsv);
                             _csvWriter.Configuration.Delimiter = ",";
                             _csvWriter.Configuration.ShouldQuote = (field, context) => true;
 
